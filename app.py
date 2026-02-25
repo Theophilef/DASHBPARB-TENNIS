@@ -3,90 +3,133 @@ import numpy as np
 import plotly.graph_objects as go
 from scipy.stats import binom
 
-st.set_page_config(layout="wide", page_title="Tennis Business Suite", page_icon="🎾")
+st.set_page_config(layout="wide", page_title="Tennis Strategy Master Suite", page_icon="🎾")
 
-# --- DESIGN PREMIUM CSS ---
+# --- STYLE CSS ---
 st.markdown("""
     <style>
-    [data-testid="stMetricValue"] { font-size: 1.8rem; font-weight: 700; color: #1f2937; }
-    .stTabs [data-baseweb="tab"] { font-weight: 600; padding: 10px 20px; }
-    .main { background-color: #f3f4f6; }
+    .stMetric { border: 1px solid #e2e8f0; padding: 15px; border-radius: 12px; background: #ffffff; }
+    .main { background-color: #f8fafc; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🎾 Tennis Strategy Executive Suite")
-st.caption("Version 4.0 - Analyse de Viabilité & Rentabilité Multitournois")
+st.title("🎾 Tennis Strategic Master Suite (Fusion v5)")
+st.markdown("---")
 
-# --- SIDEBAR ---
+# --- BARRE LATÉRALE : PARAMÈTRES ---
 with st.sidebar:
-    st.header("🛠️ Configuration")
-    mode = st.selectbox("Type de Tournoi", ["Grand Chelem (127)", "Masters 1000 (63)", "Mode Express (64)"])
+    st.header("⚙️ Configuration")
+    mode = st.selectbox("Format du Tournoi", ["Grand Chelem (127)", "Masters 1000 (63)", "1er Tour Express (64)"])
     n_matchs = 127 if "127" in mode else 63 if "63" in mode else 64
     
     st.divider()
-    n_joueurs = st.number_input("Nombre de Joueurs", value=1000000, step=100000)
-    prix_ticket = st.slider("Prix du Ticket (€)", 1.0, 10.0, 2.0)
+    n_joueurs = st.number_input("Volume de Joueurs", value=1000000, step=100000)
+    prix_ticket = st.number_input("Prix du Ticket (€)", value=2.0, step=0.5)
     precision = st.slider("Précision des Experts (%)", 50, 95, 75) / 100
     
     st.divider()
-    st.subheader("⚖️ Répartition des 80%")
-    pct_gains = st.slider("% Reversé Gains (Consolation)", 0, 80, 60)
-    pct_jackpot = 80 - pct_gains
+    st.subheader("⚖️ Répartition des 80% Joueurs")
+    pct_gains_consolation = st.slider("% Gains Immédiats (Consolation)", 0, 80, 60)
+    pct_jackpot_next = 80 - pct_gains_consolation
+    
+    st.divider()
+    st.subheader("🏦 Charges Entreprise")
+    frais_fixes = st.number_input("Frais fixes / tournoi (€)", value=25000)
+    pct_taxes_sur_marge = st.slider("Impôts & Frais Bancaires (sur les 20%)", 0, 70, 45) / 100
 
-# --- CALCULS ---
+# --- CALCULS FINANCIERS ---
 ca_total = n_joueurs * prix_ticket
-part_entreprise = ca_total * 0.20
-part_gains = ca_total * (pct_gains / 100)
-part_jackpot = ca_total * (pct_jackpot / 100)
+part_entreprise_brute = ca_total * 0.20
+impots_frais = part_entreprise_brute * pct_taxes_sur_marge
+benefice_net_unitaire = part_entreprise_brute - impots_frais - frais_fixes
 
-# --- TABS ---
-t1, t2, t3, t4 = st.tabs(["💰 Finance & CAC", "🎯 Probabilités", "🗓️ Calendrier Annuel", "📑 Audit Stratégique"])
+pot_consolation = ca_total * (pct_gains_consolation / 100)
+apport_jackpot = ca_total * (pct_jackpot_next / 100)
+
+# --- ONGLET 1 : FINANCE DÉTAILLÉE ---
+t1, t2, t3, t4, t5 = st.tabs(["💰 Finance & Marge", "🎯 Probabilités Précises", "⏳ Évolution Jackpot", "📅 Saison Complète", "📋 Synthèse Audit"])
 
 with t1:
-    st.subheader("Analyse Financière & Publicitaire")
+    st.subheader("Répartition et Flux de Trésorerie")
     col1, col2 = st.columns([2, 1])
-    
     with col1:
-        # Graphique de répartition pro
-        fig_pie = go.Figure(data=[go.Pie(labels=['Entreprise', 'Gains Joueurs', 'Jackpot'], 
-                                 values=[part_entreprise, part_gains, part_jackpot], hole=.5)])
-        fig_pie.update_traces(marker=dict(colors=['#065f46', '#3b82f6', '#fbbf24']))
-        st.plotly_chart(fig_pie, use_container_width=True, key="pie_fin")
-
-    with col2:
-        st.write("### 🚀 Coût d'Acquisition (CAC)")
-        # Calcul : Combien on peut payer pour 1 client
-        frais_fixes_estim = 20000
-        marge_dispo_marketing = (part_entreprise - frais_fixes_estim)
-        cac_max = marge_dispo_marketing / n_joueurs
-        st.metric("Budget Pub Max / Joueur", f"{cac_max:.2f} €")
-        st.info(f"Si vous payez moins de **{cac_max:.2f} €** en pub pour acquérir un joueur, vous faites du profit.")
-
-with t2:
-    st.subheader("Analyse de Risque (Binomiale)")
-    err_list = [0, 1, 2, 3]
-    probs = [ (1 - (1 - binom.pmf(n_matchs-e, n_matchs, precision))**n_joueurs)*100 for e in err_list]
+        # Waterfall Chart pour le détail
+        fig_water = go.Figure(go.Waterfall(
+            orientation = "v",
+            measure = ["relative", "relative", "relative", "relative", "total"],
+            x = ["CA Brut", "Part Joueurs (80%)", "Impôts & Frais (sur 20%)", "Frais Fixes", "Bénéfice Net"],
+            textposition = "outside",
+            text = [f"+{ca_total:,.0f}", f"-{ca_total*0.8:,.0f}", f"-{impots_frais:,.0f}", f"-{frais_fixes:,.0f}", f"{benefice_net_unitaire:,.0f}"],
+            y = [ca_total, -ca_total*0.8, -impots_frais, -frais_fixes, 0],
+            connector = {"line":{"color":"#cbd5e1"}},
+        ))
+        st.plotly_chart(fig_water, use_container_width=True)
     
-    fig_risq = go.Figure(go.Bar(x=[f"{e} Erreurs" for e in err_list], y=probs, marker_color='#065f46'))
-    fig_risq.update_layout(title="Chance d'avoir au moins 1 gagnant (%)")
-    st.plotly_chart(fig_risq, use_container_width=True, key="bar_risq")
+    with col2:
+        st.write("### 🍰 Répartition CA (%)")
+        labels = ['Part Entreprise (Marge)', 'Impôts & Banques', 'Gains Joueurs', 'Provision Jackpot']
+        values = [benefice_net_unitaire + frais_fixes, impots_frais, pot_consolation, apport_jackpot]
+        fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.4)])
+        st.plotly_chart(fig_pie, use_container_width=True)
 
+# --- ONGLET 2 : PROBABILITÉS HAUTE PRÉCISION ---
+with t2:
+    st.subheader("Analyse de Risque Mathématique")
+    st.write("Probabilité qu'au moins un joueur réussisse le palier (Précision complète) :")
+    
+    err_list = [0, 1, 2, 3, 4, 5]
+    for e in err_list:
+        p_indiv = binom.pmf(n_matchs - e, n_matchs, precision)
+        p_collectif = 1 - (1 - p_indiv)**n_joueurs
+        n_gagnants = n_joueurs * p_indiv
+        
+        c_a, c_b, c_c = st.columns([1, 2, 1])
+        c_a.write(f"**{e} Erreur(s)**")
+        # Affichage avec 12 décimales pour la précision demandée
+        c_b.code(f"{p_collectif*100:.12f} % de chance")
+        c_c.write(f"~{int(n_gagnants)} gagnants")
+
+# --- ONGLET 3 : ÉVOLUTION JACKPOT ---
 with t3:
-    st.subheader("📅 Simulation Saison Complète")
-    st.write("Estimation du bénéfice net sur 1 an (4 Grand Chelem + 9 Masters 1000)")
-    benef_annuel = (part_entreprise * 13) - (20000 * 13) # Exemple
+    st.subheader("Projection de croissance du Jackpot")
+    nb_tournois = st.slider("Tournois successifs sans 0 faute", 1, 20, 10)
+    steps = np.arange(nb_tournois + 1)
+    evol = [apport_jackpot * i for i in steps]
+    
+    fig_line = go.Figure(go.Scatter(x=steps, y=evol, mode='lines+markers', line=dict(color='#fbbf24', width=4)))
+    fig_line.update_layout(xaxis_title="Nombre de tournois", yaxis_title="Cagnotte cumulée (€)")
+    st.plotly_chart(fig_line, use_container_width=True)
+
+# --- ONGLET 4 : SAISON COMPLÈTE ---
+with t4:
+    st.subheader("Simulation Financière Annuelle")
+    # 4 GC + 9 Masters 1000
+    benef_annuel = benefice_net_unitaire * 13
+    ca_annuel = ca_total * 13
+    
     st.metric("Bénéfice Net Annuel Estimé", f"{benef_annuel:,.0f} €")
     
-    # Graphique cumulé
-    mois = ["Jan", "Fev", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Dec"]
-    ca_cumul = np.cumsum([ca_total if i in [0, 4, 7, 8] else ca_total*0.4 for i in range(12)])
-    fig_an = go.Figure(go.Scatter(x=mois, y=ca_cumul, fill='tozeroy', line_color='#3b82f6'))
+    labels_an = ['Bénéfice Net Annuel', 'Taxes & Frais Annuels', 'Coûts Fixes Annuels', 'Reversement Joueurs']
+    values_an = [benef_annuel, impots_frais*13, frais_fixes*13, (pot_consolation + apport_jackpot)*13]
+    fig_an = go.Figure(go.Bar(x=labels_an, y=values_an, marker_color='#1e3a8a'))
     st.plotly_chart(fig_an, use_container_width=True)
 
-with t4:
-    st.subheader("Rapport d'Audit Automatisé")
-    st.markdown(f"""
-    - **Viabilité du Jackpot :** Le montant de **{part_jackpot:,.0f} €** ajouté à chaque tournoi permet une croissance organique rapide.
-    - **Marge de Sécurité :** À {precision*100}% de précision, le modèle est **TRÈS SÉCURISÉ**.
-    - **Seuil de Rentabilité :** Votre structure est rentable dès que vous dépassez **{int(20000/(prix_ticket*0.2))}** joueurs.
-    """)
+# --- ONGLET 5 : SYNTHÈSE AUDIT ---
+with t5:
+    st.subheader("📋 Rapport de Viabilité")
+    col_syn1, col_syn2 = st.columns(2)
+    with col_syn1:
+        st.info(f"""
+        **Données Entreprise :**
+        - **Marge brute :** 20% fixes ({part_entreprise_brute:,.0f} €)
+        - **Impôts & Frais bancaires :** {impots_frais:,.0f} €
+        - **Bénéfice Net / Tournoi :** {benefice_net_unitaire:,.0f} €
+        - **Seuil de rentabilité :** {int(frais_fixes / (prix_ticket*0.2*(1-pct_taxes_sur_marge)))} joueurs.
+        """)
+    with col_syn2:
+        st.warning(f"""
+        **Données Joueurs :**
+        - **Gains Immédiats (Consolation) :** {pot_consolation:,.0f} € ({pct_gains_consolation}%)
+        - **Jackpot Épargné :** {apport_jackpot:,.0f} € ({pct_jackpot_next}%)
+        - **Risque de Rupture Jackpot :** Extrêmement faible sur {n_matchs} matchs.
+        """)
