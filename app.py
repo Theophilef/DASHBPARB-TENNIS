@@ -5,105 +5,87 @@ from scipy.stats import binom
 
 st.set_page_config(layout="wide", page_title="Tennis Prediction Pro", page_icon="🎾")
 
-st.title("🎾 Dashboard Stratégique Pro : Pari Mutuel Tennis")
-st.markdown("Modèle d'affaires : **20% fixes pour l'entreprise**. Si 0 faute : **80% aux gagnants**. Sinon : **60% en consolation et 20% au Jackpot**.")
+# --- STYLE PERSONNALISÉ ---
+st.markdown("""
+    <style>
+    .main { background-color: #f8f9fa; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- ONGLETS POUR LES FORMATS ---
+st.title("🎾 Tennis Prediction Pro : Simulateur de Saison")
+st.markdown("Structure : **20% fixes Entreprise** | Répartition du reste modulable.")
+
+# --- ONGLETS ---
 tab_gc, tab_m1000, tab_express = st.tabs(["🏆 Grand Chelem (127)", "🎾 Masters 1000 (63)", "⚡ 1er Tour de GC (64)"])
 
 def render_dashboard(n_matchs, nom_format):
-    st.header(f"Analyse Stratégique : {nom_format}")
-    
-    # --- CURSEURS DE PARAMÉTRAGE ---
-    st.subheader("⚙️ Paramètres de la simulation")
-    c_input1, c_input2, c_input3, c_input4 = st.columns(4)
-    n_joueurs = c_input1.number_input(f"Nombre de Joueurs", min_value=1000, value=1000000, step=50000, key=f"j_{n_matchs}")
-    prix_ticket = c_input2.number_input(f"Prix du Ticket (€)", min_value=1.0, value=2.0, step=0.5, key=f"t_{n_matchs}")
-    precision = c_input3.slider(f"Précision moyenne (%)", 50, 95, 75, key=f"p_{n_matchs}") / 100
-    
-    c_frais1, c_frais2 = st.columns(2)
-    frais_fixes = c_frais1.number_input("Frais fixes (€) (Salaires, Marketing...)", value=25000, step=5000, key=f"f_{n_matchs}")
-    pct_taxes = c_frais2.slider("Impôts/Frais (en % des 20% entreprise)", 0, 80, 45, key=f"tax_{n_matchs}") / 100
+    # --- BARRE LATÉRALE DE CONTRÔLE GÉNÉRAL ---
+    with st.sidebar:
+        st.header(f"🕹️ Contrôles {nom_format}")
+        n_joueurs = st.number_input(f"Nombre de Joueurs", min_value=1000, value=1000000, step=100000, key=f"j_{n_matchs}")
+        prix_ticket = st.number_input(f"Prix du Ticket (€)", min_value=1.0, value=2.0, step=0.5, key=f"t_{n_matchs}")
+        precision = st.slider(f"Précision des Joueurs (%)", 50, 95, 75, key=f"p_{n_matchs}") / 100
+        
+        st.divider()
+        st.subheader("💰 Stratégie de Redistribution")
+        st.caption("Si aucun gagnant à 0 faute :")
+        pct_joueurs = st.slider("Part Consolation aux joueurs (%)", 0, 80, 60, key=f"pj_{n_matchs}")
+        pct_jackpot_input = st.slider("Part Réinvestissement Jackpot (%)", 0, 80, 20, key=f"pjk_{n_matchs}")
+        
+        st.divider()
+        st.subheader("📈 Paramètres de Croissance")
+        jackpot_initial = st.number_input("Jackpot de départ (€)", value=0, key=f"ji_{n_matchs}")
+        tournois_sim = st.slider("Simuler sur X tournois", 1, 20, 10, key=f"sim_{n_matchs}")
 
-    # --- CALCULS FINANCIERS ---
+    # --- CALCULS ---
     ca_total = n_joueurs * prix_ticket
     part_entreprise_brute = ca_total * 0.20
-    montant_taxes_frais = part_entreprise_brute * pct_taxes
-    benefice_net = part_entreprise_brute - montant_taxes_frais - frais_fixes
+    apport_jackpot_actuel = ca_total * (pct_jackpot_input / 100)
+    pot_consolation = ca_total * (pct_joueurs / 100)
     
-    pot_0_faute = ca_total * 0.80
-    pot_consolation = ca_total * 0.60
-    pot_jackpot = ca_total * 0.20
+    # Proba 0 faute
+    p_0 = binom.pmf(n_matchs, n_matchs, precision)
+    chance_gagnant_0 = 1 - (1 - p_0)**n_joueurs
 
-    marge_nette_par_ticket = prix_ticket * 0.20 * (1 - pct_taxes)
-    seuil_joueurs = frais_fixes / marge_nette_par_ticket if marge_nette_par_ticket > 0 else 0
+    # --- AFFICHAGE DES CHIFFRES CLÉS ---
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("CA par Tournoi", f"{ca_total:,.0f} €")
+    c2.metric("Marge Entreprise", f"{part_entreprise_brute:,.0f} €")
+    c3.metric("Apport Jackpot/Tour", f"{apport_jackpot_actuel:,.0f} €")
+    c4.metric("Sécurité Jackpot", f"{(1-chance_gagnant_0)*100:.4f}%")
 
-    # --- CALCULS DES PROBABILITÉS ---
-    erreurs_cibles = [0, 1, 2, 3]
-    probs_au_moins_un = []
-    esperance_gagnants = []
+    # --- GRAPHIQUE D'ÉVOLUTION DU JACKPOT ---
+    st.subheader("📈 Projection de croissance du Jackpot")
+    steps = np.arange(tournois_sim + 1)
+    evol_jackpot = jackpot_initial + (apport_jackpot_actuel * steps)
     
-    for k in erreurs_cibles:
-        p_indiv = binom.pmf(n_matchs - k, n_matchs, precision)
-        p_au_moins_un = 1 - (1 - p_indiv)**n_joueurs
-        probs_au_moins_un.append(p_au_moins_un)
-        esperance_gagnants.append(n_joueurs * p_indiv)
+    fig_evol = go.Figure()
+    fig_evol.add_trace(go.Scatter(x=steps, y=evol_jackpot, mode='lines+markers', line=dict(color='#2ecc71', width=3), name="Jackpot cumulé"))
+    fig_evol.update_layout(xaxis_title="Nombre de tournois sans gagnant 0 faute", yaxis_title="Montant du Jackpot (€)", height=400)
+    st.plotly_chart(fig_evol, use_container_width=True, key=f"evol_{n_matchs}")
 
-    proba_0_faute = probs_au_moins_un[0]
-    if proba_0_faute > 0.5:
-        scenario_actuel = "Scénario A (0 Erreur trouvée : Distribution 80%)"
-    else:
-        scenario_actuel = "Scénario B (Aucun 0 Erreur : Consolation 60% + Jackpot 20%)"
+    # --- RÉPARTITION ET PROBABILITÉS ---
+    st.divider()
+    col_a, col_b = st.columns(2)
+    
+    with col_a:
+        st.subheader("🎯 Probabilités de Gains")
+        erreurs = [0, 1, 2, 3]
+        probs = [(1 - (1 - binom.pmf(n_matchs - e, n_matchs, precision))**n_joueurs)*100 for e in erreurs]
+        fig_bar = go.Figure(go.Bar(x=[f"{e} Erreurs" for e in erreurs], y=probs, marker_color='#3498db'))
+        fig_bar.update_layout(yaxis_title="% de chance d'avoir un gagnant", height=350)
+        st.plotly_chart(fig_bar, use_container_width=True, key=f"bar_{n_matchs}")
 
-    # --- AFFICHAGE DES KPIS ---
-    st.markdown("---")
-    st.markdown(f"### 💰 Chiffres Clés de l'Entreprise")
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    kpi1.metric("Chiffre d'Affaires (CA)", f"{ca_total:,.0f} €")
-    kpi2.metric("Part Entreprise Brute (20%)", f"{part_entreprise_brute:,.0f} €")
-    kpi3.metric("Bénéfice Net", f"{benefice_net:,.0f} €", delta=f"{benefice_net/ca_total*100:.1f}% Marge Nette")
-    kpi4.metric("Seuil Rentabilité (Joueurs)", f"{int(seuil_joueurs):,} joueurs", delta="Pour être à 0€ de perte", delta_color="off")
-
-    # --- AFFICHAGE DES GRAPHIQUES ---
-    st.markdown("---")
-    c_graph1, c_graph2 = st.columns(2)
-
-    with c_graph1:
-        st.markdown("### 🎯 Focus : Probabilité d'avoir des gagnants")
-        fig_prob = go.Figure()
-        fig_prob.add_trace(go.Bar(
-            x=[f"{e} erreur(s)" for e in erreurs_cibles], 
-            y=[p * 100 for p in probs_au_moins_un],
-            text=[f"{p*100:.2f}%<br>({int(esp)} gagnants espérés)" for p, esp in zip(probs_au_moins_un, esperance_gagnants)],
-            textposition='auto',
-            marker_color=['#27ae60', '#f1c40f', '#e67e22', '#e74c3c']
-        ))
-        fig_prob.update_layout(yaxis_title="% de chance", showlegend=False)
-        # LA CORRECTION EST ICI (ajout du key)
-        st.plotly_chart(fig_prob, use_container_width=True, key=f"bar_{n_matchs}")
-
-    with c_graph2:
-        st.markdown(f"### 🍰 Répartition Réelle de l'Argent")
-        st.write(f"Scénario actuel : **{scenario_actuel}**")
-        
-        if proba_0_faute > 0.05:
-            labels = ['Gagnants 0 Faute (80%)', 'Taxes & Frais', 'Bénéfice Net']
-            values = [pot_0_faute, montant_taxes_frais + frais_fixes, benefice_net]
-            colors = ['#3498db', '#95a5a6', '#2ecc71']
-        else:
-            labels = ['Joueurs Consolation (60%)', 'Jackpot Futur (20%)', 'Taxes & Frais', 'Bénéfice Net']
-            values = [pot_consolation, pot_jackpot, montant_taxes_frais + frais_fixes, benefice_net]
-            colors = ['#9b59b6', '#f1c40f', '#95a5a6', '#2ecc71']
-
-        fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.4, marker_colors=colors)])
-        # LA CORRECTION EST ICI (ajout du key)
+    with col_b:
+        st.subheader("🍰 Répartition du Cash")
+        labels = ['Part Entreprise', 'Part Joueurs (Consolation)', 'Réinvestissement Jackpot']
+        values = [20, pct_joueurs, pct_jackpot_input]
+        fig_pie = go.Figure(go.Pie(labels=labels, values=values, hole=.4))
+        fig_pie.update_layout(height=350)
         st.plotly_chart(fig_pie, use_container_width=True, key=f"pie_{n_matchs}")
 
-    st.success(f"**Payout & Rentabilité :** Sur {ca_total:,.0f} €, l'entreprise prend **{part_entreprise_brute:,.0f} €**. "
-             f"Après {montant_taxes_frais:,.0f} € de taxes et {frais_fixes:,.0f} € de coûts fixes, "
-             f"le bénéfice net est de **{benefice_net:,.0f} €**. "
-             f"Si 0 faute : **{pot_0_faute:,.0f} €** au vainqueur. Sinon : consolation de **{pot_consolation:,.0f} €** et jackpot de **{pot_jackpot:,.0f} €** épargné.")
-
-with tab_gc: render_dashboard(127, "Tableau Complet Grand Chelem (127 matchs)")
-with tab_m1000: render_dashboard(63, "Tableau Complet Masters 1000 (63 matchs)")
-with tab_express: render_dashboard(64, "Prédictions des 1ers Tours (64 matchs)")
+# Rendu des onglets
+with tab_gc: render_dashboard(127, "Grand Chelem")
+with tab_m1000: render_dashboard(63, "Masters 1000")
+with tab_express: render_dashboard(64, "1er Tour Express")
